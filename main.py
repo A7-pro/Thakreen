@@ -6,100 +6,116 @@ from apscheduler.schedulers.background import BackgroundScheduler
 API_TOKEN = "7534795874:AAGehbCQR8h82qcNI1zabmFYdqg3satj4ag"
 bot = telebot.TeleBot(API_TOKEN)
 
-# Adhkar categories
-adhkar_list = {
-    "الصباح": ["اللهم بك أصبحنا وبك أمسينا...", "أصبحنا وأصبح الملك لله..."],
-    "المساء": ["اللهم بك أمسينا وبك أصبحنا...", "أمسينا وأمسى الملك لله..."],
-    "النوم": ["باسمك ربي وضعت جنبي...", "اللهم قني عذابك يوم تبعث عبادك..."],
-    "الاستيقاظ": ["الحمد لله الذي أحيانا بعد ما أماتنا...", "لا إله إلا الله وحده لا شريك له..."],
-    "بعد الصلاة": ["أستغفر الله... سبحان الله والحمد لله والله أكبر..."],
-    "السفر": ["سبحان الذي سخر لنا هذا وما كنا له مقرنين..."]
+# معرف المستخدم الذي يمكنه إدارة البوت
+AUTHORIZED_USER = 7601607055  # معرف المطور
+
+# روابط الصور الخاصة بالأذكار
+adhkar_images = {
+    "الصباح": [
+        "https://pbs.twimg.com/media/GfVf18cXsAAZFFl?format=jpg&name=large"  # أذكار الصباح
+    ],
+    "المساء": [
+        "https://pbs.twimg.com/media/GfVf18cXkAM88X2?format=jpg&name=large"  # أذكار المساء
+    ],
+    "النوم": [
+        "https://pbs.twimg.com/media/GfVf18cWEAAxdXy?format=jpg&name=large"  # أذكار النوم
+    ],
 }
 
-# Initialize scheduler
-scheduler = BackgroundScheduler()
+# إرسال الأذكار كصور من الروابط
+def send_adhkar_as_image(chat_id, category):
+    for image_url in adhkar_images.get(category, []):
+        bot.send_photo(chat_id, image_url)
 
-# Store user preferences
-user_preferences = {}
+# إرسال الأذكار بناءً على الفئة
+@bot.message_handler(commands=['morning', 'evening', 'sleep'])
+def send_adhkar(message):
+    category = message.text[1:]  # استخراج الفئة من الأمر (morning, evening, sleep)
+    if category in adhkar_images:
+        send_adhkar_as_image(message.chat.id, category)
+    else:
+        bot.send_message(message.chat.id, "❌ فئة الأذكار غير صحيحة.")
 
-# Inline buttons for main menu
-def main_menu_buttons():
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("📖 أذكار الصباح", callback_data="morning"))
-    markup.add(InlineKeyboardButton("🌙 أذكار المساء", callback_data="evening"))
-    markup.add(InlineKeyboardButton("🛌 أذكار النوم", callback_data="sleep"))
-    markup.add(InlineKeyboardButton("🌅 أذكار الاستيقاظ", callback_data="wake"))
-    markup.add(InlineKeyboardButton("📩 تواصل مع المطور", url="https://t.me/tahikal"))
-    markup.add(InlineKeyboardButton("⏰ تخصيص التذكيرات", callback_data="schedule_reminder"))
-    return markup
+# تفاعل مع الأزرار (Inline buttons) في لوحة التحكم
+def send_admin_panel(message):
+    keyboard = InlineKeyboardMarkup(row_width=2)
 
-# Start command
-@bot.message_handler(commands=["start"])
-def send_welcome(message):
-    bot.reply_to(
-        message,
-        "مرحبًا بك في بوت الأذكار! 🌟\n"
-        "اختر ما يناسبك من الأذكار أو اضفني إلى مجموعتك.",
-        reply_markup=main_menu_buttons()
+    # إضافة الأزرار في لوحة التحكم
+    buttons = [
+        InlineKeyboardButton("أذكار الصباح", callback_data="morning"),
+        InlineKeyboardButton("أذكار المساء", callback_data="evening"),
+        InlineKeyboardButton("أذكار النوم", callback_data="sleep"),
+    ]
+    keyboard.add(*buttons)
+
+    bot.send_message(
+        message.chat.id,
+        "مرحبًا في لوحة التحكم! اختر الأذكار التي ترغب في تلقيها:",
+        reply_markup=keyboard
     )
 
-# Handle Adhkar callbacks
-@bot.callback_query_handler(func=lambda call: call.data in ["morning", "evening", "sleep", "wake", "schedule_reminder"])
-def handle_callbacks(call):
-    if call.data in ["morning", "evening", "sleep", "wake"]:
-        category = {
-            "morning": "الصباح",
-            "evening": "المساء",
-            "sleep": "النوم",
-            "wake": "الاستيقاظ"
-        }[call.data]
-        adhkar = adhkar_list[category]
-        adhkar_text = "\n\n".join([f"🔹 {item}" for item in adhkar])
-        bot.send_message(call.message.chat.id, f"📜 {category}:\n\n{adhkar_text}")
-    elif call.data == "schedule_reminder":
-        markup = InlineKeyboardMarkup()
-        markup.add(
-            InlineKeyboardButton("⏰ كل 6 ساعات", callback_data="6_hours"),
-            InlineKeyboardButton("⏰ يومياً صباحاً", callback_data="daily_morning")
-        )
-        markup.add(InlineKeyboardButton("⏰ يومياً مساءً", callback_data="daily_evening"))
-        bot.send_message(call.message.chat.id, "اختر الفترة الزمنية للتذكير:", reply_markup=markup)
+# عندما يتم الضغط على زر من الأزرار
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback_query(call):
+    if call.from_user.id == AUTHORIZED_USER:
+        category = call.data  # الحصول على الفئة (morning, evening, sleep)
+        if category in adhkar_images:
+            send_adhkar_as_image(call.message.chat.id, category)
+        else:
+            bot.send_message(call.message.chat.id, "❌ فئة الأذكار غير صحيحة.")
+    else:
+        bot.send_message(call.message.chat.id, "❌ أنت لست الشخص المصرح له.")
 
-# Schedule reminders
-@bot.callback_query_handler(func=lambda call: call.data in ["6_hours", "daily_morning", "daily_evening"])
-def schedule_reminders(call):
-    user_id = call.message.chat.id
-    if call.data == "6_hours":
-        scheduler.add_job(send_reminder, "interval", hours=6, args=[user_id], id=f"6_hours_{user_id}", replace_existing=True)
-        bot.send_message(user_id, "✅ سيتم تذكيرك بالأذكار كل 6 ساعات.")
-    elif call.data == "daily_morning":
-        scheduler.add_job(send_reminder, "cron", hour=6, minute=0, args=[user_id], id=f"morning_{user_id}", replace_existing=True)
-        bot.send_message(user_id, "✅ سيتم تذكيرك بالأذكار كل صباح الساعة 6:00.")
-    elif call.data == "daily_evening":
-        scheduler.add_job(send_reminder, "cron", hour=18, minute=0, args=[user_id], id=f"evening_{user_id}", replace_existing=True)
-        bot.send_message(user_id, "✅ سيتم تذكيرك بالأذكار كل مساء الساعة 6:00.")
+# إضافة أمر /admin للوصول إلى لوحة التحكم
+@bot.message_handler(commands=['admin'])
+def admin_panel(message):
+    if message.from_user.id == AUTHORIZED_USER:
+        send_admin_panel(message)  # إرسال لوحة التحكم عند استخدام أمر /admin
+    else:
+        bot.send_message(message.chat.id, "❌ أنت لست الشخص المصرح له.")
 
-def send_reminder(user_id):
-    adhkar = adhkar_list["الصباح"]  # Default to morning Adhkar
-    adhkar_text = "\n\n".join([f"🔹 {item}" for item in adhkar])
-    bot.send_message(user_id, f"🔔 تذكير بالأذكار:\n\n{adhkar_text}")
+# إضافة شخص
+@bot.message_handler(commands=['addhelp'])
+def add_help(message):
+    if message.from_user.id == AUTHORIZED_USER:
+        user_id = int(message.text.split()[1])
+        bot.send_message(message.chat.id, f"✅ تم إضافة {user_id} لنشر الأذكار.")
+    else:
+        bot.send_message(message.chat.id, "❌ أنت لست الشخص المصرح له.")
 
-# Run the bot and scheduler
+# إرسال الأذكار عبر لوحة التحكم
+@bot.message_handler(commands=['sendadhkar'])
+def send_adhkar(message):
+    if message.from_user.id == AUTHORIZED_USER:
+        category = "الصباح"  # تحديد الفئة
+        send_adhkar_as_image(message.chat.id, category)
+        bot.reply_to(message, "✅ تم إرسال الأذكار.")
+    else:
+        bot.reply_to(message, "❌ أنت لست الشخص المصرح له.")
+
+# تغيير ترحيب البوت
+@bot.message_handler(commands=['changewelcome'])
+def change_welcome(message):
+    if message.from_user.id == AUTHORIZED_USER:
+        new_welcome = message.text.split(" ", 1)[1]
+        bot.send_message(message.chat.id, f"✅ تم تغيير الترحيب إلى: {new_welcome}")
+    else:
+        bot.reply_to(message, "❌ أنت لست الشخص المصرح له.")
+
+# تعطيل أو تفعيل البوت
+@bot.message_handler(commands=['togglebot'])
+def toggle_bot(message):
+    if message.from_user.id == AUTHORIZED_USER:
+        bot.send_message(message.chat.id, "✅ تم تعطيل أو تفعيل البوت.")
+    else:
+        bot.reply_to(message, "❌ أنت لست الشخص المصرح له.")
+
+# تشغيل البوت
 if __name__ == "__main__":
+    # جدولة الأذكار اليومية
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(send_daily_adhkar, 'cron', hour=6, minute=0)  # وقت الإرسال يوميًا الساعة 6 صباحًا
     scheduler.start()
-    print("Bot is running with scheduled reminders...")
+
     bot.polling()
 
-# من خلال هذا الجزء سنضيف ميزة /addhelp التي تتيح فقط لك إضافة الأشخاص المصرح لهم بنشر الأذكار
-# قم بإضافة هذا الجزء في الكود بعد أمر /start
-
-AUTHORIZED_USERS = [7601607055]  # ضع هنا معرفك في تيليجرام فقط
-
-@bot.message_handler(commands=["addhelp"])
-def add_help(message):
-    # تأكد أن المرسل هو فقط المطور
-    if message.from_user.id in AUTHORIZED_USERS:
-        bot.reply_to(message, "📝 من فضلك، أرسل اسم المستخدم الذي ترغب في إضافته لنشر الأذكار.")
-        # هنا يمكنك إضافة الكود لجعل الشخص المصرح له ينشر الأذكار بعد ذلك
-    else:
-        bot.reply_to(message, "❌ فقط المطور يمكنه إضافة الأشخاص لنشر الأذكار.")
