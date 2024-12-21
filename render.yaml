@@ -6,7 +6,3 @@ services:
     plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python main.py"
-    routes:
-      - path: /
-        preserveHost: true
-        stripPath: true
